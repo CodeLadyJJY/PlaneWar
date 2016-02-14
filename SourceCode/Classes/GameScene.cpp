@@ -108,16 +108,11 @@ bool GameScene::init()
 	//移动背景
 	this->schedule(schedule_selector(GameScene::scrollBG), 0.01f);
 
-	//移动飞机
-	this->schedule(schedule_selector(GameScene::movePlane), 0.02);
+	//增加子弹、敌机
+	this->schedule(schedule_selector(GameScene::newBody), 1);
 
-	//子弹
-	this->schedule(schedule_selector(GameScene::newBullet), 1);
-	this->schedule(schedule_selector(GameScene::moveBullet), 0.02);
-
-	//敌机
-	this->schedule(schedule_selector(GameScene::newEnemy), 1);
-	this->schedule(schedule_selector(GameScene::moveEnemy), 0.02);
+	//移动飞机、子弹、敌机
+	this->schedule(schedule_selector(GameScene::moveBody), 0.02);
 
 	//碰撞检测和游戏逻辑
 	this->scheduleUpdate();
@@ -137,6 +132,19 @@ void GameScene::scrollBG(float t)
 		galaxy1->setPosition(Point::ZERO);
 }
 
+void GameScene::newBody(float t)
+{
+	newBullet();
+	newEnemy();
+}
+
+void GameScene::moveBody(float t)
+{
+	movePlane();
+	moveBullet();
+	moveEnemy();
+}
+
 void GameScene::newPlane()
 {
 	auto plane = PlaneSprite::create();
@@ -145,7 +153,24 @@ void GameScene::newPlane()
 	addChild(plane);
 }
 
-void GameScene::movePlane(float t)
+void GameScene::newBullet()
+{
+	PlaneSprite* plane = (PlaneSprite*)this->getChildByTag(120);
+	auto bullet = Sprite::create("bullet_03.png");
+	bullet->setPosition(Point(plane->getPosition().x, plane->getPosition().y + plane->getContentSize().height));
+	this->addChild(bullet);
+	allBullet.pushBack(bullet);
+}
+
+void GameScene::newEnemy()
+{
+	auto enemy = Enemy::create();
+	enemy->setPositionRC(rand() % (winSize_width - 30), winSize_height);
+	this->addChild(enemy);
+	allEnemy.pushBack(enemy);
+}
+
+void GameScene::movePlane()
 {
 	auto p = this->getChildByTag(120);
 	
@@ -166,15 +191,22 @@ void GameScene::movePlane(float t)
 	}
 }
 
-void GameScene::newEnemy(float t)
+void GameScene::moveBullet()
 {
-	auto enemy = Enemy::create();
-	enemy->setPositionRC(rand() % (winSize_width - 30), winSize_height);
-	this->addChild(enemy);
-	allEnemy.pushBack(enemy);
+	for (int i = 0; i<allBullet.size(); ++i)
+	{
+		auto nowBullet = allBullet.at(i);
+		nowBullet->setPositionY(nowBullet->getPositionY() + 5);
+		if (nowBullet->getPositionY() > winSize_height)
+		{
+			nowBullet->removeFromParent();
+			allBullet.eraseObject(nowBullet);
+			i--;
+		}
+	}
 }
 
-void GameScene::moveEnemy(float t)
+void GameScene::moveEnemy()
 {
 	for (int i = 0; i < allEnemy.size(); ++i)
 	{
@@ -189,28 +221,37 @@ void GameScene::moveEnemy(float t)
 	}
 }
 
-void GameScene::newBullet(float t)
+//爆炸动画
+void GameScene::newBomb(int x, int y, int type)
 {
-	PlaneSprite* plane = (PlaneSprite*)this->getChildByTag(120);
-	auto bullet = Sprite::create("bullet_03.png");
-	bullet->setPosition(Point(plane->getPosition().x, plane->getPosition().y + plane->getContentSize().height));
-	this->addChild(bullet);
-	allBullet.pushBack(bullet);
+	std::string typestr;
+
+	if (type == 1)
+		typestr = "bomb_01.png";
+	else
+		typestr = "bomb_02.png";
+
+	Vector<SpriteFrame*> allBomb;
+	for (int i = 0; i < 5; ++i)
+	{
+		auto bomb = SpriteFrame::create(typestr, Rect(i * 102, 0, 102, 128));
+		allBomb.pushBack(bomb);
+	}
+
+	auto ani = Animation::createWithSpriteFrames(allBomb, 0.25);
+	auto sprite = Sprite::create();
+	auto act = Sequence::create(
+		Animate::create(ani),
+		CCCallFuncN::create(sprite, callfuncN_selector(GameScene::cleanBomb)),
+		nullptr);
+	sprite->setPosition(Point(x, y));
+	sprite->runAction(act);
+	this->addChild(sprite);
 }
 
-void GameScene::moveBullet(float t)
+void GameScene::cleanBomb(Node* pRef)
 {
-	for (int i = 0; i<allBullet.size(); ++i)
-	{
-		auto nowBullet = allBullet.at(i);
-		nowBullet->setPositionY(nowBullet->getPositionY() + 5);
-		if (nowBullet->getPositionY() > winSize_height)
-		{
-			nowBullet->removeFromParent();
-			allBullet.eraseObject(nowBullet);
-			i--;
-		}
-	}
+	pRef->removeFromParentAndCleanup(true);
 }
 
 void GameScene::update(float t)
@@ -288,45 +329,22 @@ void GameScene::update(float t)
 			//播放音效
 			SimpleAudioEngine::getInstance()->playEffect("explosion3.mp3");
 
+			//飞机被击中次数超过3次
 			if (plane->m_hitNum >= 3)
 			{
-				SimpleAudioEngine::getInstance()->stopBackgroundMusic();
-				auto scene = GameOver::createScene();
-				Director::getInstance()->replaceScene(TransitionProgressOutIn::create(0.5, scene));
+				gameOver();
 			}
 		}
 	}
 }
 
-//爆炸动画
-void GameScene::newBomb(int x, int y, int type)
+void GameScene::gameOver()
 {
-	std::string typestr;
+	SimpleAudioEngine::getInstance()->stopBackgroundMusic();
 
-	if (type == 1)
-		typestr = "bomb_01.png";
-	else
-		typestr = "bomb_02.png";
+	this->unscheduleAllSelectors();
+	this->unscheduleUpdate();
 
-	Vector<SpriteFrame*> allBomb;
-	for (int i = 0; i < 5; ++i)
-	{
-		auto bomb = SpriteFrame::create(typestr, Rect(i * 102, 0, 102, 128));
-		allBomb.pushBack(bomb);
-	}
-
-	auto ani = Animation::createWithSpriteFrames(allBomb, 0.25);
-	auto sprite = Sprite::create();
-	auto act = Sequence::create(
-		Animate::create(ani),
-		CCCallFuncN::create(sprite, callfuncN_selector(GameScene::cleanBomb)),
-		nullptr);
-	sprite->setPosition(Point(x, y));
-	sprite->runAction(act);
-	this->addChild(sprite);
-}
-
-void GameScene::cleanBomb(Node* pRef)
-{
-	pRef->removeFromParentAndCleanup(true);
+	auto scene = GameOver::createScene();
+	Director::getInstance()->replaceScene(TransitionProgressOutIn::create(0.5, scene));
 }

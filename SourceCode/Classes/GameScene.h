@@ -17,15 +17,18 @@ private:
 	cocos2d::Sprite* galaxy2;
 
 	void scrollBG(float);
+	void newBody(float t);
+	void moveBody(float t);
 	void newPlane();
-	void movePlane(float t);
-	void newBullet(float t);
-	void moveBullet(float t);
-	void newEnemy(float t);
-	void moveEnemy(float t);
+	void newBullet();
+	void newEnemy();
+	void movePlane();
+	void moveBullet();
+	void moveEnemy();
 	void newBomb(int x, int y, int type);		//±¬Õ¨¶¯»­
 	void cleanBomb(Node* pRef);
 	void update(float t);
+	void gameOver();
 
 public:
 	static cocos2d::Scene * createScene();
